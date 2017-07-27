@@ -6,6 +6,13 @@ LOGGER = logging.getLogger(__name__)
 
 
 class MPDClient:
+    """
+    Simple async MPD client
+
+    Work in progress: first draft
+
+    MPD protocol documentation: https://www.musicpd.org/doc/protocol/
+    """
     def __init__(self, host: str, port: int=6600, loop=None):
         self._host = host  # type: str
         self._port = port  # type: int
