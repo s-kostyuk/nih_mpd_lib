@@ -30,6 +30,10 @@ if __name__ == "__main__":
 
     loop.run_until_complete(execute_command(client, "stop"))
 
+    loop.run_until_complete(client._update_status())  # Only for debugging
+
+    print(client.status)
+
     try:
         loop.run_forever()
     finally:

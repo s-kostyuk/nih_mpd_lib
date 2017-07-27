@@ -56,7 +56,8 @@ class MPDClient:
     async def _read_data(self):
         assert self._reader is not None
 
-        return await self._reader.readline()
+        # return await self._reader.read()  # hangs here
+        return await self._reader.read(asyncio.streams._DEFAULT_LIMIT)  # works as expected, but is doubtful
 
     async def send_command(self, command: str):
         async with self._socket_write_lock:
@@ -73,21 +74,21 @@ class MPDClient:
 
             await self._enter_idle()
 
-        if data.startswith(b"OK"):
-            pass
-        else:
+        if data.startswith(b"ACK"):
             raise Exception("Failed to execute command")  # FIXME: choose proper Exception type
+        else:
+            assert data.endswith(b'OK\n')
 
         return data
 
-    async def _enter_idle(self):
+    async def _enter_idle(self):  # FIXME: consider using of context manager
         if self._idling_enabled:
             self._idling = True
 
             async with self._socket_write_lock:
                 self._send_command("idle")
 
-    async def _exit_idle(self):
+    async def _exit_idle(self):  # FIXME: consider using of context manager
         if self._idling:
             self._idling = False
 
@@ -95,6 +96,7 @@ class MPDClient:
                 self._send_command("noidle")
 
     async def _status_updater(self):
+        # FIXME: rewrite this function
         self._idling_enabled = True
 
         while True:
@@ -113,7 +115,7 @@ class MPDClient:
         self._idling_enabled = False
 
     async def _request_status(self):
-        return await self._send_command("status")
+        return await self.send_command("status")
 
     async def _update_status(self):
         self._status = await self._request_status()
