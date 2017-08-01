@@ -13,11 +13,11 @@ class MPDClient:
 
     MPD protocol documentation: https://www.musicpd.org/doc/protocol/
     """
-    def __init__(self, host: str, port: int=6600, loop=None):
+    def __init__(self, host: str, port: int=6600, loop: asyncio.AbstractEventLoop=None):
         self._host = host  # type: str
         self._port = port  # type: int
 
-        self._loop = loop
+        self._loop = loop  # type: asyncio.AbstractEventLoop
 
         self._reader = None  # type: asyncio.StreamReader
         self._writer = None  # type: asyncio.StreamWriter
