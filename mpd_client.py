@@ -26,9 +26,6 @@ class MPDClient:
 
         self._socket_write_lock = asyncio.Lock(loop=self._loop)
 
-        self._idling_enabled = False
-        self._idling = False
-
     @property
     def status(self):
         return self._status
@@ -68,8 +65,6 @@ class MPDClient:
 
     async def send_command(self, command: str):
         async with self._socket_write_lock:
-            await self._exit_idle()
-
             LOGGER.debug("Sending command {0}... ".format(command))
             self._send_command(command)
 
@@ -79,47 +74,12 @@ class MPDClient:
 
             LOGGER.debug("Reading finished")
 
-            await self._enter_idle()
-
         if data.startswith(b"ACK"):
             raise Exception("Failed to execute command")  # FIXME: choose proper Exception type
         else:
             assert data.endswith(b'OK\n')
 
         return data
-
-    async def _enter_idle(self):  # FIXME: consider using of context manager
-        if self._idling_enabled:
-            self._idling = True
-
-            async with self._socket_write_lock:
-                self._send_command("idle")
-
-    async def _exit_idle(self):  # FIXME: consider using of context manager
-        if self._idling:
-            self._idling = False
-
-            async with self._socket_write_lock:
-                self._send_command("noidle")
-
-    async def _status_updater(self):
-        # FIXME: rewrite this function
-        self._idling_enabled = True
-
-        while True:
-            self._enter_idle()
-
-            data = await self._read_data()
-
-            # FIXME: add data checking
-
-            # idle exited here
-            self._idling = False
-
-            self._update_status()
-
-        # FIXME: Unreachable code
-        self._idling_enabled = False
 
     async def _request_status(self):
         return await self.send_command("status")
