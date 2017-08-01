@@ -70,8 +70,11 @@ async def mpd_client(loop):
         # wait a second (just to simplify debugging)
         asyncio.sleep(1)
 
-        # sand "play" command
-        await send_play()
+        # send "status" command
+        writer.write(b'status\n')
+
+        # get status info
+        await read_data()
 
         # wait a second (just to simplify debugging)
         asyncio.sleep(1)
