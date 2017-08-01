@@ -70,14 +70,14 @@ class MPDClient:
         async with self._socket_write_lock:
             await self._exit_idle()
 
-            print("Sending command...")
+            LOGGER.debug("Sending command {0}... ".format(command))
             self._send_command(command)
 
-            print("Reading data...")
+            LOGGER.debug("Reading data...")
 
             data = await self._read_data()
 
-            print("Reading finished")
+            LOGGER.debug("Reading finished")
 
             await self._enter_idle()
 
