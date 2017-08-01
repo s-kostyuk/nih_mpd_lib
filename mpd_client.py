@@ -13,6 +13,8 @@ class MPDClient:
 
     MPD protocol documentation: https://www.musicpd.org/doc/protocol/
     """
+    IDLING_CANCELED = b"idling canceled\nOK\n"
+
     def __init__(self, host: str, port: int=6600, loop: asyncio.AbstractEventLoop=None):
         self._host = host  # type: str
         self._port = port  # type: int
@@ -24,7 +26,9 @@ class MPDClient:
 
         self._status = None  # FIXME: specify type
 
-        self._socket_write_lock = asyncio.Lock(loop=self._loop)
+        self._command_lock = asyncio.Lock(loop=self._loop)
+
+        self._is_idling = False
 
     @property
     def status(self):
@@ -64,7 +68,9 @@ class MPDClient:
         return await self._reader.read(asyncio.streams._DEFAULT_LIMIT)  # works as expected, but is doubtful
 
     async def send_command(self, command: str):
-        async with self._socket_write_lock:
+        await self._stop_idling_if_needed(command)
+
+        async with self._command_lock:
             LOGGER.debug("Sending command {0}... ".format(command))
             self._send_command(command)
 
@@ -72,7 +78,7 @@ class MPDClient:
 
             data = await self._read_data()
 
-            LOGGER.debug("Reading finished")
+            LOGGER.debug("Reading finished: %s", data)
 
         if data.startswith(b"ACK"):
             raise Exception("Failed to execute command")  # FIXME: choose proper Exception type
@@ -80,6 +86,31 @@ class MPDClient:
             assert data.endswith(b'OK\n')
 
         return data
+
+    async def wait_for_updates(self):
+        while True:
+            self._is_idling = True
+
+            data = await self.send_command("idle")
+
+            logging.debug("Idling finished with data: %s", data)
+
+            self._send_command("noidle")
+            self._is_idling = False
+
+            if data != self.IDLING_CANCELED:
+                await self._update_status()
+
+    async def _stop_idling_if_needed(self, command: str):
+        if command == "idle":
+            return
+
+        if self._is_idling:
+            logging.debug("Sending noidle...")
+            self._reader.feed_data(self.IDLING_CANCELED)
+
+            self._send_command("noidle")
+
 
     async def _request_status(self):
         return await self.send_command("status")

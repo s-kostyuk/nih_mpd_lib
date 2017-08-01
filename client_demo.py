@@ -52,6 +52,8 @@ if __name__ == "__main__":
 
     #th = threading.Thread(target=console_interface_function, args=(loop, client), daemon=True)
 
+    loop.create_task(client.wait_for_updates())
+
     #print(client.status)
 
     try:
