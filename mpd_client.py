@@ -120,7 +120,7 @@ class MPDClient:
 
         return data
 
-    async def _send_command_and_disable_idle(self, command: str) -> bytes:
+    async def _send_command_while_idling(self, command: str) -> bytes:
         """
         Stop idling, send a command to the MPD server and wait for an answer
         :param command: command to be sent
@@ -142,7 +142,7 @@ class MPDClient:
         :param command: command to be sent
         :return: execution result; a server answer
         """
-        return await self._send_command_and_disable_idle(command)
+        return await self._send_command_while_idling(command)
 
     async def wait_for_updates(self):
         """
