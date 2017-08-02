@@ -1,7 +1,6 @@
 import asyncio
 import logging
 
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -15,7 +14,7 @@ class MPDClient:
     """
     IDLING_CANCELED = b"idling canceled\nOK\n"
 
-    def __init__(self, host: str, port: int=6600, loop: asyncio.AbstractEventLoop=None):
+    def __init__(self, host: str, port: int = 6600, loop: asyncio.AbstractEventLoop = None):
         self._host = host  # type: str
         self._port = port  # type: int
 
@@ -47,7 +46,8 @@ class MPDClient:
         :return: data read
         """
         if self._writer is None:
-            raise Exception("Attempted to read data without an established connection!")  # FIXME: choose proper exception type
+            raise Exception(
+                "Attempted to read data without an established connection!")  # FIXME: choose proper exception type
 
         # return await self._reader.read()  # hangs here
         return await self._reader.read(asyncio.streams._DEFAULT_LIMIT)  # works as expected, but is doubtful
@@ -69,7 +69,8 @@ class MPDClient:
         if data.startswith(b"OK"):
             LOGGER.debug("Established, server answer: %s", data)
         else:
-            raise Exception("Failed to establish connection, server answer: %s", data)  # FIXME: choose proper exception type
+            raise Exception("Failed to establish connection, server answer: %s",
+                            data)  # FIXME: choose proper exception type
 
         self._allow_idling()
 
@@ -91,7 +92,8 @@ class MPDClient:
         :return: None
         """
         if self._writer is None:
-            raise Exception("Attempted to send a command without an established connection!")  # FIXME: choose proper exception type
+            raise Exception(
+                "Attempted to send a command without an established connection!")  # FIXME: choose proper exception type
 
         self._writer.write(
             self._prepare_command(command)
@@ -174,10 +176,9 @@ class MPDClient:
             logging.debug("Sending noidle...")
 
             # WARNING: The order is important
-            # - disallow idling first
-            # - then let wait_for_updates loop to pass reader.read() statement
-            self._idling_allowed.clear()
-            self._reader.feed_data(self.IDLING_CANCELED)
+            self._idling_allowed.clear()  # disallow idling first
+            self._reader.feed_data(
+                self.IDLING_CANCELED)  # then let wait_for_updates loop to pass reader.read() statement
 
             # WARNING: MPD sends an b'OK\n' response only to the first 'noidle' call.
             # If 'idle' command was already canceled, then there is no answer to 'noidle',
