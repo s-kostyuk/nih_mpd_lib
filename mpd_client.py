@@ -40,18 +40,6 @@ class MPDClient:
         """
         return self._status
 
-    async def _read_data(self) -> bytes:
-        """
-        Read all pending data from StreamReader buffer
-        :return: data read
-        """
-        if self._writer is None:
-            raise Exception(
-                "Attempted to read data without an established connection!")  # FIXME: choose proper exception type
-
-        # return await self._reader.read()  # hangs here
-        return await self._reader.read(asyncio.streams._DEFAULT_LIMIT)  # works as expected, but is doubtful
-
     async def connect(self):
         """
         Establish a TCP connection to MPD server
@@ -73,6 +61,52 @@ class MPDClient:
                             data)  # FIXME: choose proper exception type
 
         self._allow_idling()
+
+    async def send_command(self, command: str) -> bytes:
+        """
+        Execute general MPD command
+        :param command: command to be sent
+        :return: execution result; a server answer
+        """
+        return await self._send_command_while_idling(command)
+
+    async def update_status(self):
+        """
+        Force update status
+        :return: None
+        """
+        # Send 'status' command and save returned data to self._status
+        self._status = await self._request_status()
+
+    async def wait_for_updates(self):
+        """
+        An infinite loop which sends 'idle', waits for any events on
+        MPD server and updates self.status on each event
+        :return: None
+        """
+        while True:
+            await self._idling_allowed.wait()
+
+            self._is_idling = True
+
+            data = await self._send_command_with_response("idle")
+
+            logging.debug("Idling finished with data: %s", data)
+
+            if data != self.IDLING_CANCELED:
+                await self.update_status()
+
+    async def _read_data(self) -> bytes:
+        """
+        Read all pending data from StreamReader buffer
+        :return: data read
+        """
+        if self._writer is None:
+            raise Exception(
+                "Attempted to read data without an established connection!")  # FIXME: choose proper exception type
+
+        # return await self._reader.read()  # hangs here
+        return await self._reader.read(asyncio.streams._DEFAULT_LIMIT)  # works as expected, but is doubtful
 
     @staticmethod
     def _prepare_command(command: str) -> bytes:
@@ -138,32 +172,6 @@ class MPDClient:
 
         return response
 
-    async def send_command(self, command: str) -> bytes:
-        """
-        Execute general MPD command
-        :param command: command to be sent
-        :return: execution result; a server answer
-        """
-        return await self._send_command_while_idling(command)
-
-    async def wait_for_updates(self):
-        """
-        An infinite loop which sends 'idle', waits for any events on
-        MPD server and updates self.status on each event
-        :return: None
-        """
-        while True:
-            await self._idling_allowed.wait()
-
-            self._is_idling = True
-
-            data = await self._send_command_with_response("idle")
-
-            logging.debug("Idling finished with data: %s", data)
-
-            if data != self.IDLING_CANCELED:
-                await self.update_status()
-
     async def _stop_idling_if_needed(self):
         """
         Stop idling:
@@ -202,11 +210,3 @@ class MPDClient:
         :return: a response to 'status' command
         """
         return await self.send_command("status")
-
-    async def update_status(self):
-        """
-        Force update status
-        :return: None
-        """
-        # Send 'status' command and save returned data to self._status
-        self._status = await self._request_status()
