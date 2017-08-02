@@ -128,9 +128,11 @@ class MPDClient:
         """
         await self._stop_idling_if_needed()
 
-        response = await self._send_command_with_response(command)
-
-        await self._allow_idling()
+        # Get execution result and allow idling even if command failed
+        try:
+            response = await self._send_command_with_response(command)
+        finally:
+            self._allow_idling()
 
         return response
 
@@ -186,7 +188,7 @@ class MPDClient:
             # Reset is_idling state to prevent successive calls of 'noidle'
             self._is_idling = False
 
-    async def _allow_idling(self):
+    def _allow_idling(self):
         """
         Allow idling loop to start the new iteration
         :return: None
