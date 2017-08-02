@@ -27,6 +27,7 @@ class MPDClient:
         self._status = None  # FIXME: specify type
 
         self._command_lock = asyncio.Lock(loop=self._loop)
+        self._idling_allowed = asyncio.Event(loop=self._loop)
 
         self._is_idling = False
 
@@ -48,13 +49,15 @@ class MPDClient:
         else:
             raise Exception("Failed to establish connection")  # FIXME: choose proper exception type
 
+        self._idling_allowed.set()
+
     @staticmethod
     def _prepare_command(command: str) -> bytes:
         terminated_command = "{0}\n".format(command)
 
         return terminated_command.encode(encoding='utf-8')
 
-    def _send_command(self, command: str):
+    async def _send_command_base(self, command: str):
         assert self._writer is not None
 
         self._writer.write(
@@ -67,12 +70,10 @@ class MPDClient:
         # return await self._reader.read()  # hangs here
         return await self._reader.read(asyncio.streams._DEFAULT_LIMIT)  # works as expected, but is doubtful
 
-    async def send_command(self, command: str):
-        await self._stop_idling_if_needed(command)
-
+    async def _send_command_with_response(self, command: str):
         async with self._command_lock:
             LOGGER.debug("Sending command {0}... ".format(command))
-            self._send_command(command)
+            await self._send_command_base(command)
 
             LOGGER.debug("Reading data...")
 
@@ -87,30 +88,48 @@ class MPDClient:
 
         return data
 
+    async def _send_command_and_disable_idle(self, command: str):
+        await self._stop_idling_if_needed()
+
+        await self._send_command_with_response(command)
+
+        await self._enable_idling()
+
+    async def send_command(self, command: str):
+        await self._send_command_and_disable_idle(command)
+
     async def wait_for_updates(self):
         while True:
+            await self._idling_allowed.wait()
+
             self._is_idling = True
 
-            data = await self.send_command("idle")
+            data = await self._send_command_with_response("idle")
 
             logging.debug("Idling finished with data: %s", data)
 
-            self._send_command("noidle")
-            self._is_idling = False
+            # await self._send_command_with_response("noidle")
+            # self._is_idling = False
 
             if data != self.IDLING_CANCELED:
                 await self._update_status()
 
-    async def _stop_idling_if_needed(self, command: str):
-        if command == "idle":
-            return
-
+    async def _stop_idling_if_needed(self):
         if self._is_idling:
             logging.debug("Sending noidle...")
+
+            # WARNING: The order is important
+            # - disallow idling first
+            # - then let wait_for_updates loop to pass reader.read() statement
+            self._idling_allowed.clear()
             self._reader.feed_data(self.IDLING_CANCELED)
 
-            self._send_command("noidle")
+            await self._send_command_with_response("noidle")
 
+            self._is_idling = False
+
+    async def _enable_idling(self):
+        self._idling_allowed.set()
 
     async def _request_status(self):
         return await self.send_command("status")
