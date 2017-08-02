@@ -78,12 +78,22 @@ if __name__ == "__main__":
 
     #th = threading.Thread(target=console_interface_function, args=(loop, client), daemon=True)
 
-    loop.create_task(client.wait_for_updates())  # Plan on execution a status updater coroutine
+    # Plan on execution a status updater coroutine
+    updater_task = loop.create_task(client.wait_for_updates())  # type: asyncio.Task
 
     #print(client.status)
 
     try:
         loop.run_in_executor(None, console_interface_function, client, loop)  # Run CLI in separate thread
         loop.run_forever()  # Run event loop and block further app execution (optionally)
+    except KeyboardInterrupt:
+        pass
     finally:
-        loop.close()  # close event loop
+        updater_task.cancel()
+
+        try:
+            loop.run_until_complete(asyncio.gather(updater_task))
+        except asyncio.CancelledError:
+            pass
+        finally:
+            loop.close()  # close event loop
