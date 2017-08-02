@@ -162,7 +162,7 @@ class MPDClient:
             logging.debug("Idling finished with data: %s", data)
 
             if data != self.IDLING_CANCELED:
-                await self._update_status()
+                await self.update_status()
 
     async def _stop_idling_if_needed(self):
         """
@@ -203,7 +203,7 @@ class MPDClient:
         """
         return await self.send_command("status")
 
-    async def _update_status(self):
+    async def update_status(self):
         """
         Force update status
         :return: None
