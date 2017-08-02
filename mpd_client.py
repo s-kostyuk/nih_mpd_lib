@@ -27,15 +27,25 @@ class MPDClient:
         self._status = None  # FIXME: specify type
 
         self._command_lock = asyncio.Lock(loop=self._loop)
+
+        # Event that allows idling loop to start the new iteration
         self._idling_allowed = asyncio.Event(loop=self._loop)
 
         self._is_idling = False
 
     @property
     def status(self):
+        """
+        Get the copy of the current MPD status information
+        :return: status information
+        """
         return self._status
 
-    async def _read_data(self):
+    async def _read_data(self) -> bytes:
+        """
+        Read all pending data from StreamReader buffer
+        :return: data read
+        """
         if self._writer is None:
             raise Exception("Attempted to read data without an established connection!")  # FIXME: choose proper exception type
 
@@ -43,8 +53,13 @@ class MPDClient:
         return await self._reader.read(asyncio.streams._DEFAULT_LIMIT)  # works as expected, but is doubtful
 
     async def connect(self):
+        """
+        Establish a TCP connection to MPD server
+        :return: None
+        """
         LOGGER.debug("Establishing connection: %s, %s", self._host, self._port)
 
+        # Open TCP connection and get StreamReader and StreamWriter pair
         self._reader, self._writer = await asyncio.open_connection(
             host=self._host, port=self._port, loop=self._loop
         )
@@ -54,17 +69,27 @@ class MPDClient:
         if data.startswith(b"OK"):
             LOGGER.debug("Established, server answer: %s", data)
         else:
-            raise Exception("Failed to establish connection")  # FIXME: choose proper exception type
+            raise Exception("Failed to establish connection, server answer: %s", data)  # FIXME: choose proper exception type
 
-        self._idling_allowed.set()
+        self._allow_idling()
 
     @staticmethod
     def _prepare_command(command: str) -> bytes:
+        """
+        Generate EOL-terminated bytestring based on general string
+        :param command: string, command to be sent
+        :return: bytes-encoded EOL-terminated string
+        """
         terminated_command = "{0}\n".format(command)
 
         return terminated_command.encode(encoding='utf-8')
 
     async def _send_command_base(self, command: str):
+        """
+        Send a command to the MPD server without waiting for an answer
+        :param command: command to be sent
+        :return: None
+        """
         if self._writer is None:
             raise Exception("Attempted to send a command without an established connection!")  # FIXME: choose proper exception type
 
@@ -72,7 +97,12 @@ class MPDClient:
             self._prepare_command(command)
         )
 
-    async def _send_command_with_response(self, command: str):
+    async def _send_command_with_response(self, command: str) -> bytes:
+        """
+        Send a command to the MPD server and wait for an answer
+        :param command: command to be sent
+        :return: execution result; a server answer
+        """
         async with self._command_lock:
             LOGGER.debug("Sending command {0}... ".format(command))
             await self._send_command_base(command)
@@ -90,17 +120,34 @@ class MPDClient:
 
         return data
 
-    async def _send_command_and_disable_idle(self, command: str):
+    async def _send_command_and_disable_idle(self, command: str) -> bytes:
+        """
+        Stop idling, send a command to the MPD server and wait for an answer
+        :param command: command to be sent
+        :return: execution result; a server answer
+        """
         await self._stop_idling_if_needed()
 
-        await self._send_command_with_response(command)
+        response = await self._send_command_with_response(command)
 
-        await self._enable_idling()
+        await self._allow_idling()
 
-    async def send_command(self, command: str):
-        await self._send_command_and_disable_idle(command)
+        return response
+
+    async def send_command(self, command: str) -> bytes:
+        """
+        Execute general MPD command
+        :param command: command to be sent
+        :return: execution result; a server answer
+        """
+        return await self._send_command_and_disable_idle(command)
 
     async def wait_for_updates(self):
+        """
+        An infinite loop which sends 'idle', waits for any events on
+        MPD server and updates self.status on each event
+        :return: None
+        """
         while True:
             await self._idling_allowed.wait()
 
@@ -114,6 +161,13 @@ class MPDClient:
                 await self._update_status()
 
     async def _stop_idling_if_needed(self):
+        """
+        Stop idling:
+         - block idling loop; clear self._idling_allowed event
+         - feed self.IDLING_CANCELED to the StreamReader buffer
+         - send 'noidle' if 'idle' command was sent to MPD server
+        :return: None
+        """
         if self._is_idling:
             logging.debug("Sending noidle...")
 
@@ -123,15 +177,33 @@ class MPDClient:
             self._idling_allowed.clear()
             self._reader.feed_data(self.IDLING_CANCELED)
 
+            # WARNING: MPD sends an b'OK\n' response only to the first 'noidle' call.
+            # If 'idle' command was already canceled, then there is no answer to 'noidle',
+            # which results to infinite waiting for response and deadlock in
+            # self._send_command_with_response.
             await self._send_command_with_response("noidle")
 
+            # Reset is_idling state to prevent successive calls of 'noidle'
             self._is_idling = False
 
-    async def _enable_idling(self):
+    async def _allow_idling(self):
+        """
+        Allow idling loop to start the new iteration
+        :return: None
+        """
         self._idling_allowed.set()
 
-    async def _request_status(self):
+    async def _request_status(self) -> bytes:
+        """
+        Send 'status' command and get its response
+        :return: a response to 'status' command
+        """
         return await self.send_command("status")
 
     async def _update_status(self):
+        """
+        Force update status
+        :return: None
+        """
+        # Send 'status' command and save returned data to self._status
         self._status = await self._request_status()
