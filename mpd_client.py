@@ -35,6 +35,13 @@ class MPDClient:
     def status(self):
         return self._status
 
+    async def _read_data(self):
+        if self._writer is None:
+            raise Exception("Attempted to read data without an established connection!")  # FIXME: choose proper exception type
+
+        # return await self._reader.read()  # hangs here
+        return await self._reader.read(asyncio.streams._DEFAULT_LIMIT)  # works as expected, but is doubtful
+
     async def connect(self):
         LOGGER.debug("Establishing connection: %s, %s", self._host, self._port)
 
@@ -58,17 +65,12 @@ class MPDClient:
         return terminated_command.encode(encoding='utf-8')
 
     async def _send_command_base(self, command: str):
-        assert self._writer is not None
+        if self._writer is None:
+            raise Exception("Attempted to send a command without an established connection!")  # FIXME: choose proper exception type
 
         self._writer.write(
             self._prepare_command(command)
         )
-
-    async def _read_data(self):
-        assert self._reader is not None
-
-        # return await self._reader.read()  # hangs here
-        return await self._reader.read(asyncio.streams._DEFAULT_LIMIT)  # works as expected, but is doubtful
 
     async def _send_command_with_response(self, command: str):
         async with self._command_lock:
@@ -107,9 +109,6 @@ class MPDClient:
             data = await self._send_command_with_response("idle")
 
             logging.debug("Idling finished with data: %s", data)
-
-            # await self._send_command_with_response("noidle")
-            # self._is_idling = False
 
             if data != self.IDLING_CANCELED:
                 await self._update_status()
