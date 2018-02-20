@@ -2,4 +2,4 @@ Simple MPD client, written with "not invited here" reason. A coroutine-based alt
 
 For usage samples see [./client_demo.py](./client_demo.py), scroll straight to `main` block.
 
-For MPD Client implementation see [./mpd_client.py](./mpd_client.py).
+For MPD Client implementation see [./nih_mpd_lib/mpd_client.py](./nih_mpd_lib/mpd_client.py).
